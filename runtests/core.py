@@ -6,46 +6,22 @@ runtests.core
 This module implements the core functionality of runtests.
 """
 import os
-import subprocess
 import sys
 
 import yaml
 
+from runtests.shell import Shell
 
-def command(cmd, env=None):
-    '''
-    Execute ``cmd`` and return (code, stdout, and stderr).
-    The actual environment is updated with ``env`` dict,
-    and the command is run.
-    '''
-    environ = dict(os.environ)
-    environ.update(env or {})
-    process = subprocess.Popen(cmd,
-        universal_newlines=True,
-        shell=True,
-        env=environ,
-        stdin=subprocess.PIPE,
-        stdout=sys.stdout,
-        stderr=sys.stdout,
-        bufsize=0,
-        cwd=None,
-    )
-    out, err = process.communicate()
-    return process.returncode
-
-def handle_commands(cmds, env=None):
+def handle_commands(shell, cmds, env=None):
     '''
     Execute commands in ``cmds`` list.
     ``env`` dict is passed to each command.
+    Each of the command is sent to the ``shell``.
 
     The execution loop breaks when one of the commands exits with non-zero.
     '''
     for cmd in cmds:
-        print cmd
-        code = command(cmd, env=env)
-        if code > 0:
-            return False
-    return True
+        shell.execute(cmd)
 
 def execute(filename):
     '''
@@ -54,20 +30,25 @@ def execute(filename):
     config = yaml.load(open(filename))
     yep = nope = 0
     for env in config.get('env', []):
-        print 'running test... %r' % (env, )
-        if not handle_commands(config.get('before_script', []), env=env):
-            nope += 1
-            continue
+        shell = Shell()
+        print '$ export ' + env
+        shell.execute('export ' + env)
         try:
-            if not handle_commands(config.get('script', []), env=env):
-                nope += 1
-                continue
-            yep += 1
+            for before_script in config.get('before_script', []):
+                shell.execute(before_script)
+            for script in config.get('script', []):
+                shell.execute(script)
         finally:
             # Cleanup
-            handle_commands(config.get('after_script', []), env=env)
-            print 'test finished...'
-    print 'TOTAL', yep + nope
-    print 'SUCCESS', yep
-    print 'FAILURE', nope
-    return yep
+            w = shell.wait()
+            # Cleanup is done in fresh shell.
+            cleanup_shell = Shell()
+            for after_script in config.get('after_script', []):
+                cleanup_shell.execute(after_script)
+            if w > 0:
+                nope += 1
+            else:
+                yep += 1
+    print 'success:', yep
+    print 'failure:', nope
+    return nope == 0
