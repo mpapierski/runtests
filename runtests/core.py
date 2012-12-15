@@ -7,27 +7,18 @@ This module implements the core functionality of runtests.
 """
 import os
 import sys
+import time
 
 import yaml
 
 from runtests.shell import Shell
-
-def handle_commands(shell, cmds, env=None):
-    '''
-    Execute commands in ``cmds`` list.
-    ``env`` dict is passed to each command.
-    Each of the command is sent to the ``shell``.
-
-    The execution loop breaks when one of the commands exits with non-zero.
-    '''
-    for cmd in cmds:
-        shell.execute(cmd)
 
 def execute(filename):
     '''
     Load ``filename`` and execute defined script in a matrix.
     '''
     config = yaml.load(open(filename))
+    start = time.time()
     yep = nope = 0
     for env in config.get('env', []):
         shell = Shell()
@@ -47,8 +38,13 @@ def execute(filename):
                 cleanup_shell.execute(after_script)
             if w > 0:
                 nope += 1
+                print u'✖ failure'
             else:
                 yep += 1
-    print 'success:', yep
-    print 'failure:', nope
+                print u'✔ success' 
+    print
+    print 'summary'
+    print 'passes: %d' % (yep, )
+    print 'failures: %d' % (nope, )
+    print 'duration: %.2fs' % (time.time() - start, )
     return nope == 0
