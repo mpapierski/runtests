@@ -22,7 +22,6 @@ def execute(filename):
     yep = nope = 0
     for env in config.get('env', []):
         shell = Shell()
-        print '$ export ' + env
         shell.execute('export ' + env)
         try:
             for before_script in config.get('before_script', []):
@@ -32,16 +31,23 @@ def execute(filename):
         finally:
             # Cleanup
             w = shell.wait()
+            del shell
             # Cleanup is done in fresh shell.
             cleanup_shell = Shell()
-            for after_script in config.get('after_script', []):
-                cleanup_shell.execute(after_script)
+            cleanup_shell.execute('export ' + env)
+            try:
+                for after_script in config.get('after_script', []):
+                    cleanup_shell.execute(after_script)
+            finally:
+                cleanup_shell.wait()
+                del cleanup_shell
+
             if w > 0:
                 nope += 1
-                print u'✖ failure'
+                print '✖ failure'
             else:
                 yep += 1
-                print u'✔ success' 
+                print '✔ success' 
     print
     print 'summary'
     print 'passes: %d' % (yep, )
